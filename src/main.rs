@@ -9,7 +9,6 @@ fn is_node(node: &Node) -> bool {
     }
 }
 
-#[allow(dead_code)]
 fn is_text(node: &Node) -> bool {
     match node {
         Node::Text(_) => true,
@@ -17,8 +16,23 @@ fn is_text(node: &Node) -> bool {
     }
 }
 
-fn crawl_element(elem: Element) -> Result<Vec<String>> {
+/* turn relative URLs into absolute URLS */
+fn get_url(url: &str, root_url: &str) -> String {
+    if url.starts_with("https://") || url.starts_with("http://") {
+        return url.into();
+    }
+
+    format!(
+        "{}/{}",
+        root_url.strip_suffix("/").unwrap_or(root_url),
+        url.strip_prefix("/").unwrap_or(url)
+    )
+}
+
+fn crawl_element(elem: Element, root_url: &str) -> Result<Vec<String>> {
     let mut links = Vec::new();
+
+    /* check for a link on the node */
     if elem.name == "a" {
         let href_attribute = elem
             .attributes
@@ -30,7 +44,7 @@ fn crawl_element(elem: Element) -> Result<Vec<String>> {
         match href_attribute {
             Ok((_, Some(value))) => {
                 log::info!("Link found: {:?}", value.clone());
-                links.push(value.to_string());
+                links.push(get_url(&value, &root_url));
             }
             _ => {
                 log::error!("No links for {}...", elem.name);
@@ -41,7 +55,7 @@ fn crawl_element(elem: Element) -> Result<Vec<String>> {
     for node in elem.children.iter().filter(|c| is_node(c)) {
         match node {
             Node::Element(elem) => {
-                let mut children_links = crawl_element(elem.clone())?;
+                let mut children_links = crawl_element(elem.clone(), root_url)?;
                 links.append(&mut children_links);
             }
             _ => {
@@ -61,7 +75,7 @@ async fn crawl_url(url: &str) -> Result<Vec<String>> {
     for child in dom.children {
         match child {
             Node::Element(elem) => {
-                log::info!("{:?}:{:#?}", elem.name.clone(), crawl_element(elem));
+                log::info!("{:?}:{:#?}", elem.name.clone(), crawl_element(elem, &url));
             }
             _ => {
                 todo!();
